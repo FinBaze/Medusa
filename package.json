@@ -1,0 +1,62 @@
+{
+  "name": "@finbaze/medusa",
+  "version": "0.1.0",
+  "description": "Finbaze Medusa plugin: tax quoting, product sync, and sales invoice order sync.",
+  "private": true,
+  "author": "Finbaze",
+  "license": "UNLICENSED",
+  "files": [
+    ".medusa/server"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./.medusa/server/src/modules/*": "./.medusa/server/src/modules/*/index.js",
+    "./modules/*": "./.medusa/server/src/modules/*/index.js",
+    "./providers/*": "./.medusa/server/src/providers/*/index.js",
+    "./*": "./.medusa/server/src/*.js",
+    "./admin": {
+      "import": "./.medusa/server/src/admin/index.mjs",
+      "require": "./.medusa/server/src/admin/index.js",
+      "default": "./.medusa/server/src/admin/index.js"
+    }
+  },
+  "keywords": [
+    "medusa-v2",
+    "plugin",
+    "medusa-plugin-integration",
+    "finbaze",
+    "tax"
+  ],
+  "scripts": {
+    "build": "medusa plugin:build",
+    "dev": "medusa plugin:develop",
+    "prepublishOnly": "medusa plugin:build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@medusajs/admin-sdk": "^2.8.0",
+    "@medusajs/cli": "^2.8.0",
+    "@medusajs/framework": "^2.8.0",
+    "@medusajs/icons": "^2.8.0",
+    "@medusajs/medusa": "^2.8.0",
+    "@medusajs/ui": "^4.0.0",
+    "@swc/core": "^1.5.7",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.2",
+    "@types/react-dom": "^18.2.25",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.6.2"
+  },
+  "peerDependencies": {
+    "@medusajs/admin-sdk": "^2.8.0",
+    "@medusajs/cli": "^2.8.0",
+    "@medusajs/framework": "^2.8.0",
+    "@medusajs/icons": "^2.8.0",
+    "@medusajs/medusa": "^2.8.0",
+    "@medusajs/ui": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
