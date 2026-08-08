@@ -223,7 +223,8 @@ const FinbazePage = () => {
       <div className="rounded-lg border border-ui-border-base p-4">
         <Heading level="h2">HS codes</Heading>
         <Text size="small" className="text-ui-fg-subtle mt-2">
-          Set product metadata <code>hs_code</code> or{" "}
+          Each Medusa variant syncs as its own Finbaze product. Set product (or
+          variant) metadata <code>hs_code</code> or{" "}
           <code>finbaze_hs_code</code> so Finbaze can suggest{" "}
           <code>taxCodesByCountry</code> on first import. Assign tax regions to
           the Finbaze tax provider (<code>tp_finbaze_finbaze</code>) for

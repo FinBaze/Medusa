@@ -37,6 +37,7 @@ export class Migration20260807200000 extends Migration {
         "id" text not null,
         "store_key" text not null,
         "medusa_product_id" text not null,
+        "medusa_variant_id" text not null,
         "finbaze_product_id" text not null,
         "created_at" timestamptz not null default now(),
         "updated_at" timestamptz not null default now(),
@@ -45,7 +46,10 @@ export class Migration20260807200000 extends Migration {
       );
     `)
     this.addSql(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "IDX_finbaze_product_link_store_product_unique" ON "finbaze_product_link" (store_key, medusa_product_id) WHERE deleted_at IS NULL;`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "IDX_finbaze_product_link_store_variant_unique" ON "finbaze_product_link" (store_key, medusa_variant_id) WHERE deleted_at IS NULL;`,
+    )
+    this.addSql(
+      `CREATE INDEX IF NOT EXISTS "IDX_finbaze_product_link_store_product" ON "finbaze_product_link" (store_key, medusa_product_id) WHERE deleted_at IS NULL;`,
     )
 
     this.addSql(`

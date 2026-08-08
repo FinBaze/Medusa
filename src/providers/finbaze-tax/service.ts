@@ -16,6 +16,7 @@ import {
   type QuoteSalesTaxLineResult,
   type QuoteSalesTaxResult,
 } from "../../lib/finbaze-client"
+import { toMinorUnits } from "../../lib/money"
 import { tryGetFinbazeModuleService } from "../../lib/module-access"
 
 type InjectedDependencies = {
@@ -45,16 +46,45 @@ function customerVatNumber(context: TaxCalculationContext): string | undefined {
 
 async function resolveFinbazeProductId(
   storeKey: string,
-  medusaProductId?: string | null,
+  params: {
+    medusaVariantId?: string | null
+    medusaProductId?: string | null
+  },
 ): Promise<string | undefined> {
-  if (!medusaProductId) return undefined
   const service = tryGetFinbazeModuleService()
   if (!service) return undefined
-  const links = await service.listProductLinks({
-    store_key: storeKey,
-    medusa_product_id: medusaProductId,
-  })
-  return links[0]?.finbaze_product_id
+
+  if (params.medusaVariantId) {
+    const byVariant = await service.listProductLinks({
+      store_key: storeKey,
+      medusa_variant_id: params.medusaVariantId,
+    })
+    if (byVariant[0]?.finbaze_product_id) {
+      return byVariant[0].finbaze_product_id
+    }
+  }
+
+  // TaxableItemDTO only guarantees product_id; fall back to any variant link.
+  if (params.medusaProductId) {
+    const byProduct = await service.listProductLinks({
+      store_key: storeKey,
+      medusa_product_id: params.medusaProductId,
+    })
+    return byProduct[0]?.finbaze_product_id
+  }
+
+  return undefined
+}
+
+function lineItemVariantId(lineItem: {
+  id: string
+  product_id?: string
+  variant_id?: string
+}): string | undefined {
+  if (typeof lineItem.variant_id === "string" && lineItem.variant_id) {
+    return lineItem.variant_id
+  }
+  return undefined
 }
 
 export default class FinbazeTaxProvider implements ITaxProvider {
@@ -104,26 +134,35 @@ export default class FinbazeTaxProvider implements ITaxProvider {
     const quoteLines: QuoteSalesTaxLineInput[] = []
 
     for (const item of itemLines) {
-      const productId = await resolveFinbazeProductId(
-        this.storeKey_,
-        item.line_item.product_id,
-      )
+      const lineItem = item.line_item as typeof item.line_item & {
+        variant_id?: string
+      }
+      const productId = await resolveFinbazeProductId(this.storeKey_, {
+        medusaVariantId: lineItemVariantId(lineItem),
+        medusaProductId: lineItem.product_id,
+      })
+      const currency = item.line_item.currency_code?.toUpperCase() ?? "EUR"
       quoteLines.push({
         externalLineId: `item:${item.line_item.id}`,
         productId,
         quantity: toNumber(item.line_item.quantity) || 1,
-        unitPriceMinor: Math.round(toNumber(item.line_item.unit_price)),
-        currency: item.line_item.currency_code?.toUpperCase(),
+        unitPriceMinor: toMinorUnits(item.line_item.unit_price, currency),
+        currency,
         isShipping: false,
       })
     }
 
     for (const shipping of shippingLines) {
+      const currency =
+        shipping.shipping_line.currency_code?.toUpperCase() ?? "EUR"
       quoteLines.push({
         externalLineId: `shipping:${shipping.shipping_line.id}`,
         quantity: 1,
-        unitPriceMinor: Math.round(toNumber(shipping.shipping_line.unit_price)),
-        currency: shipping.shipping_line.currency_code?.toUpperCase(),
+        unitPriceMinor: toMinorUnits(
+          shipping.shipping_line.unit_price,
+          currency,
+        ),
+        currency,
         isShipping: true,
       })
     }

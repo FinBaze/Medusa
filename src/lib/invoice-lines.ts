@@ -1,5 +1,6 @@
 import type { BigNumberValue } from "@medusajs/framework/types"
 import type { MarketplaceInvoiceLineInput } from "./finbaze-client"
+import { toMinorUnits } from "./money"
 
 /**
  * Medusa v2 money/qty fields use BigNumberValue (number | string | BigNumber).
@@ -21,11 +22,12 @@ export type MedusaOrderLineLike = {
   variant_title?: string | null
   quantity?: MedusaNumericLike
   unit_price?: MedusaNumericLike
-  /** Minor units (cents) — Medusa stores money as integers / BigNumberValue. */
+  /** Major units in Medusa v2 — converted to Finbaze minor units on sync. */
   subtotal?: MedusaNumericLike
   discount_total?: MedusaNumericLike
   tax_total?: MedusaNumericLike
   product_id?: string | null
+  variant_id?: string | null
   tax_lines?: MedusaTaxLineLike[] | null
 }
 
@@ -48,22 +50,25 @@ function taxCodeFromLines(
 
 /**
  * Build Finbaze draft invoice lines from a Medusa order.
- * Prices are Finbaze minor units (same as Medusa integer currency amounts).
+ * Converts Medusa major-unit amounts to Finbaze minor units.
  */
 export function buildInvoiceLinesFromMedusaOrder(params: {
   items: MedusaOrderLineLike[]
   shippingMethods?: MedusaShippingLineLike[]
-  productIdByMedusaProductId?: Map<string, string>
+  currency: string
+  /** Medusa variant id → Finbaze product id */
+  productIdByMedusaVariantId?: Map<string, string>
 }): MarketplaceInvoiceLineInput[] {
   const lines: MarketplaceInvoiceLineInput[] = []
-  const productMap = params.productIdByMedusaProductId ?? new Map()
+  const productMap = params.productIdByMedusaVariantId ?? new Map()
+  const currency = params.currency
 
   for (const item of params.items) {
     const quantity = Number(item.quantity ?? 0)
     if (quantity <= 0) continue
 
-    const unitPrice = Number(item.unit_price ?? 0)
-    const discountTotal = Number(item.discount_total ?? 0)
+    const unitPrice = toMinorUnits(item.unit_price, currency)
+    const discountTotal = toMinorUnits(item.discount_total, currency)
     const discountPerUnit =
       quantity > 0 ? Math.round(discountTotal / quantity) : 0
     const name =
@@ -71,8 +76,8 @@ export function buildInvoiceLinesFromMedusaOrder(params: {
       [item.product_title, item.variant_title].filter(Boolean).join(" / ") ||
       "Item"
 
-    const finbazeProductId = item.product_id
-      ? productMap.get(item.product_id)
+    const finbazeProductId = item.variant_id
+      ? productMap.get(item.variant_id)
       : undefined
 
     lines.push({
@@ -86,7 +91,7 @@ export function buildInvoiceLinesFromMedusaOrder(params: {
   }
 
   for (const shipping of params.shippingMethods ?? []) {
-    const amount = Number(shipping.amount ?? 0)
+    const amount = toMinorUnits(shipping.amount, currency)
     if (amount === 0) continue
     lines.push({
       name: shipping.name?.trim() || "Shipping",
@@ -102,7 +107,8 @@ export function buildInvoiceLinesFromMedusaOrder(params: {
 export function buildCreditLineFromAmounts(params: {
   name: string
   quantity: number
-  unitPrice: number
+  /** Already in Finbaze minor units */
+  unitPriceMinor: number
   taxCode?: string
   productId?: string
 }): { name: string; quantity: number; price: number; taxCode?: string; productId?: string } | null {
@@ -111,7 +117,7 @@ export function buildCreditLineFromAmounts(params: {
     name: params.name,
     quantity: params.quantity,
     // Credit lines use negative unit prices (Shopify parity)
-    price: -Math.abs(params.unitPrice),
+    price: -Math.abs(params.unitPriceMinor),
     taxCode: params.taxCode,
     productId: params.productId,
   }

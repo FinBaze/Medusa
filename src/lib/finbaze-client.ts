@@ -282,6 +282,10 @@ export type MarketplaceInvoiceLineInput = {
   productId?: string
 }
 
+/**
+ * Draft sales invoice payload for Finbaze.
+ * Do not include `number` — Finbaze assigns it atomically on close.
+ */
 export type MarketplaceInvoiceInput = {
   reference?: string
   currency: string
@@ -902,40 +906,27 @@ export async function fetchProfileSellToCountries(
   auth: FinbazeLinkAuth,
 ): Promise<string[]> {
   const data = await finbazeGraphql<{
-    taxObligations: {
-      edges: Array<{
-        node: {
-          sellToCountries?: string[] | null
-          registrationCountry?: string | null
-        }
-      }>
-    }
+    profile?: {
+      sellToCountries?: string[] | null
+      registrationCountry?: string | null
+    } | null
   }>(
     auth,
-    `query TaxObligations($profileId: String!) {
-      taxObligations(
-        paging: { first: 20 }
-        filter: { profileId: { eq: $profileId } }
-      ) {
-        edges {
-          node {
-            sellToCountries
-            registrationCountry
-          }
-        }
+    `query ProfileSellToCountries($id: ID!) {
+      profile(id: $id) {
+        sellToCountries
+        registrationCountry
       }
     }`,
-    { profileId: auth.profileId },
+    { id: auth.profileId },
   )
 
   const countries = new Set<string>()
-  for (const edge of data.taxObligations.edges) {
-    for (const country of edge.node.sellToCountries ?? []) {
-      if (country) countries.add(country)
-    }
-    if (edge.node.registrationCountry) {
-      countries.add(edge.node.registrationCountry)
-    }
+  for (const country of data.profile?.sellToCountries ?? []) {
+    if (country) countries.add(country)
+  }
+  if (data.profile?.registrationCountry) {
+    countries.add(data.profile.registrationCountry)
   }
   return [...countries]
 }

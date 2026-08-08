@@ -3,8 +3,8 @@
 Medusa v2 plugin that connects a merchant store to Finbaze:
 
 - **Tax Module Provider** — checkout tax lines via Finbaze `quoteSalesTax` (profile obligations + imported products)
-- **Product sync** — Medusa products → Finbaze products (`ProductLink`, HS → `taxCodesByCountry`)
-- **Order sync** — Shopify-parity invoices: draft on place/update, close+send when fulfilled, historical close without send, cancel/refund credits
+- **Product sync** — Medusa **variants** → Finbaze products (`ProductLink` by `medusa_variant_id`, HS → `taxCodesByCountry`)
+- **Order sync** — Shopify-parity invoices: draft on place/update, close+send when fulfilled, historical close without send, cancel/refund credits. Invoice `number` is left empty (Finbaze assigns on close); Medusa `display_id` goes in `reference`. Amounts are converted from Medusa major units to Finbaze minor units.
 
 ## Install
 
@@ -99,16 +99,20 @@ OAuth redirect URI (seeded on `finbaze-medusa`):
 Open **Finbaze** in Medusa Admin (`/app/finbaze`):
 
 1. **Connect Finbaze** — PKCE OAuth against `{WEB}/oauth/authorize` (public client: no secret)
-2. **Sync products** — bulk upsert into Finbaze + `ProductLink`
+2. **Sync products** — one Finbaze product per Medusa variant + `ProductLink`
 3. **Import historical orders** — draft/close with `send: false` when fulfilled
+
+### Product / variant mapping
+
+Finbaze has no variant entity: each Medusa variant becomes its own Finbaze product (SKU, EAN, prices). `ProductLink` stores both `medusa_variant_id` (unique) and `medusa_product_id` (tax fallback when Medusa only passes `product_id`).
 
 ### Product HS metadata
 
-On Medusa products, set metadata:
+On Medusa products (or variants), set metadata:
 
 - `hs_code` or `finbaze_hs_code`
 
-On first create, the plugin calls `suggestTaxCodesForHsCode` for the profile’s sell-to countries.
+On first create of each variant, the plugin calls `suggestTaxCodesForHsCode` for the profile’s sell-to countries.
 
 ## Tax quote contract
 
@@ -134,7 +138,7 @@ input QuoteSalesTaxLineInput {
 
 - Auth: `sales_invoices:write` for quote; `products:write` for product CRUD
 - Shipping lines are sent with `isShipping: true`
-- Item lines map Medusa `product_id` → Finbaze `productId` via `ProductLink`
+- Item lines map Medusa `variant_id` → Finbaze `productId` via `ProductLink` (tax provider falls back to `product_id` when variant is unavailable)
 
 ## Lifecycle (orders)
 

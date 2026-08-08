@@ -20,8 +20,9 @@ import {
   type MedusaOrderLineLike,
   type MedusaShippingLineLike,
 } from "./invoice-lines"
+import { toMinorUnits } from "./money"
 import { getFinbazeModuleService } from "./module-access"
-import { loadProductIdMap } from "./product-sync"
+import { loadVariantIdMap } from "./product-sync"
 
 export type MedusaOrderLike = {
   id: string
@@ -68,9 +69,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Order number for Finbaze `reference` (invoice `number` is auto-assigned on close). */
 function orderReference(order: MedusaOrderLike): string {
   if (order.display_id != null) return `#${order.display_id}`
   return order.id
+}
+
+function orderCurrency(order: MedusaOrderLike): string {
+  return (order.currency_code ?? "eur").toUpperCase()
 }
 
 function customerVatNumber(order: MedusaOrderLike): string | undefined {
@@ -90,9 +96,11 @@ function mapOrderToInvoiceInput(
     order.customer?.company_name ??
     [first, last].filter(Boolean).join(" ")
 
+  const currency = orderCurrency(order)
   return {
+    // Never set Finbaze invoice `number` — allocated on close. Order id goes in reference.
     reference: orderReference(order),
-    currency: (order.currency_code ?? "eur").toUpperCase(),
+    currency,
     date:
       order.created_at instanceof Date
         ? order.created_at.toISOString()
@@ -107,7 +115,8 @@ function mapOrderToInvoiceInput(
     lines: buildInvoiceLinesFromMedusaOrder({
       items: order.items ?? [],
       shippingMethods: order.shipping_methods ?? [],
-      productIdByMedusaProductId: productMap,
+      currency,
+      productIdByMedusaVariantId: productMap,
     }),
   }
 }
@@ -337,6 +346,7 @@ function mapRefundToCreditLines(
   productMap: Map<string, string>,
 ): FinbazeCreditLineInput[] {
   const lines: FinbazeCreditLineInput[] = []
+  const currency = orderCurrency(order)
   const itemsById = new Map(
     (order.items ?? []).map((item) => [item.id ?? "", item]),
   )
@@ -354,27 +364,28 @@ function mapRefundToCreditLines(
       orderItem.title?.trim() ||
       orderItem.product_title?.trim() ||
       "Refunded item"
-    const unitPrice = Number(orderItem.unit_price ?? 0)
-    const productId = orderItem.product_id
-      ? productMap.get(orderItem.product_id)
+    const unitPriceMinor = toMinorUnits(orderItem.unit_price, currency)
+    const productId = orderItem.variant_id
+      ? productMap.get(orderItem.variant_id)
       : undefined
     const taxCode = orderItem.tax_lines?.[0]?.code ?? undefined
 
     const credit = buildCreditLineFromAmounts({
       name,
       quantity,
-      unitPrice,
+      unitPriceMinor,
       taxCode: taxCode ?? undefined,
       productId,
     })
     if (credit) lines.push(credit)
   }
 
-  if (lines.length === 0 && Number(refund.amount ?? 0) > 0) {
+  const refundAmountMinor = toMinorUnits(refund.amount, currency)
+  if (lines.length === 0 && refundAmountMinor > 0) {
     lines.push({
       name: `${orderReference(order)} refund`,
       quantity: 1,
-      price: -Math.abs(Number(refund.amount)),
+      price: -Math.abs(refundAmountMinor),
     })
   }
 
@@ -390,7 +401,7 @@ export async function syncOrderCredits(params: {
   refunds: MedusaRefundLike[]
 }): Promise<{ credited: number }> {
   const service = getFinbazeModuleService()
-  const productMap = await loadProductIdMap(params.storeKey)
+  const productMap = await loadVariantIdMap(params.storeKey)
   let credited = 0
   let invoice = await fetchSalesInvoiceDetails(
     params.auth,
@@ -473,7 +484,7 @@ export async function syncMedusaOrder(params: {
     return { action: "cancelled" }
   }
 
-  const productMap = await loadProductIdMap(storeKey)
+  const productMap = await loadVariantIdMap(storeKey)
   const invoiceInput = mapOrderToInvoiceInput(params.order, productMap)
   const closeBehavior = resolveCloseBehavior({
     mode: params.mode,
