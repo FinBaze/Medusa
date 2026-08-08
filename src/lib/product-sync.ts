@@ -19,7 +19,7 @@ export type MedusaVariantLike = {
   barcode?: string | null
   metadata?: Record<string, unknown> | null
   prices?: Array<{
-    amount?: number | null
+    amount?: number | string | null
     currency_code?: string | null
   }> | null
 }

@@ -1,5 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ensureFinbazeService } from "../lib/ensure-service"
+import { loadMedusaProductWithPrices } from "../lib/load-medusa-products"
 import { syncMedusaProductToFinbaze } from "../lib/product-sync"
 
 export default async function productCreatedHandler({
@@ -8,10 +9,8 @@ export default async function productCreatedHandler({
 }: SubscriberArgs<{ id: string }>) {
   ensureFinbazeService(container)
 
-  const productModule = container.resolve("product")
-  const product = await productModule.retrieveProduct(data.id, {
-    relations: ["variants", "variants.prices"],
-  })
+  const product = await loadMedusaProductWithPrices(container, data.id)
+  if (!product) return
 
   await syncMedusaProductToFinbaze({ product })
 }

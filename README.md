@@ -99,8 +99,10 @@ OAuth redirect URI (seeded on `finbaze-medusa`):
 Open **Finbaze** in Medusa Admin (`/app/finbaze`):
 
 1. **Connect Finbaze** — PKCE OAuth against `{WEB}/oauth/authorize` (public client: no secret)
-2. **Sync products** — one Finbaze product per Medusa variant + `ProductLink`
+2. **Sync products** — one Finbaze product per Medusa variant + `ProductLink` (prices via Query / Pricing Module)
 3. **Import historical orders** — draft/close with `send: false` when fulfilled
+4. **Imported invoices** (`/app/finbaze/invoices`) — paginated list of synced orders (Shopify-parity)
+5. **Settings** (`/app/finbaze/settings`) — after disconnect, **Clear local DB links** wipes Medusa-side `ProductLink` / `OrderLink` / credits / cursors / connection (debug only; does not delete Finbaze data)
 
 ### Product / variant mapping
 
@@ -159,8 +161,8 @@ integrations/medusa/
     providers/finbaze-tax/
     lib/                 # finbaze-client, product-sync, order-sync, invoice-lines
     subscribers/
-    api/admin/finbaze/
-    admin/routes/finbaze/
+    api/admin/finbaze/          # status, sync, invoices list
+    admin/routes/finbaze/       # setup + nested Imported invoices
 ```
 
 ## Development (this repo)

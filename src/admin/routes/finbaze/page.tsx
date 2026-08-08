@@ -9,6 +9,7 @@ import {
   toast,
 } from "@medusajs/ui"
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 
 type FinbazeStatus = {
   storeKey: string
@@ -206,6 +207,14 @@ const FinbazePage = () => {
             >
               Import historical orders
             </Button>
+            <Button variant="secondary" asChild>
+              <Link to="/finbaze/invoices">
+                Imported invoices
+                {status.orderLinkCount > 0
+                  ? ` (${status.orderLinkCount})`
+                  : ""}
+              </Link>
+            </Button>
             {status.profileBaseUrl ? (
               <Button
                 variant="transparent"
@@ -218,7 +227,21 @@ const FinbazePage = () => {
             ) : null}
           </>
         )}
+        <Button variant="transparent" asChild>
+          <Link to="/finbaze/settings">Settings</Link>
+        </Button>
       </div>
+
+      {!loading && status && !status.connected ? (
+        <Text size="small" className="text-ui-fg-subtle">
+          Local links still on this store: {status.productLinkCount} products ·{" "}
+          {status.orderLinkCount} orders. Clear them from{" "}
+          <Link to="/finbaze/settings" className="underline">
+            Settings
+          </Link>{" "}
+          when debugging.
+        </Text>
+      ) : null}
 
       <div className="rounded-lg border border-ui-border-base p-4">
         <Heading level="h2">HS codes</Heading>
