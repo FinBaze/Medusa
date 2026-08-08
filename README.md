@@ -12,8 +12,10 @@ In your Medusa application:
 
 ```bash
 npm install @finbaze/medusa
+pnpm add @finbaze/medusa
 # or, from this monorepo during development:
 # npx medusa plugin:add @finbaze/medusa
+# pnpm exec medusa plugin:add @finbaze/medusa
 ```
 
 ### `medusa-config.ts`
@@ -28,9 +30,6 @@ module.exports = defineConfig({
       resolve: "@finbaze/medusa",
       options: {
         storeKey: process.env.FINBAZE_STORE_KEY || "default",
-        apiUrl: process.env.FINBAZE_API_URL,
-        webBaseUrl: process.env.FINBAZE_WEB_BASE_URL,
-        clientId: process.env.FINBAZE_APP_CLIENT_ID || "finbaze-medusa",
         // Optional — public/OSS installs use PKCE only (omit secret)
         clientSecret: process.env.FINBAZE_APP_CLIENT_SECRET,
         backendUrl: process.env.MEDUSA_BACKEND_URL,
@@ -60,6 +59,7 @@ Then migrate:
 
 ```bash
 npx medusa db:migrate
+pnpm exec medusa db:migrate
 ```
 
 Assign each tax region that should use Finbaze to provider id `tp_finbaze_finbaze` (Medusa stores providers as `tp_{identifier}_{id}`).
@@ -68,14 +68,13 @@ Assign each tax region that should use Finbaze to provider id `tp_finbaze_finbaz
 
 See [`.env.example`](./.env.example).
 
+`FINBAZE_API_URL`, `FINBAZE_WEB_BASE_URL`, and `FINBAZE_APP_CLIENT_ID` default to production (`https://api.platform.finbaze.com`, `https://platform.finbaze.com`, `finbaze-medusa`). Override only for local Finbaze or a custom client.
+
 | Variable | Purpose |
 |---|---|
-| `FINBAZE_API_URL` | Finbaze API (token + GraphQL) |
-| `FINBAZE_WEB_BASE_URL` | Web app (OAuth authorize UI) |
-| `FINBAZE_APP_CLIENT_ID` | Marketplace app uuid (`finbaze-medusa`) |
-| `FINBAZE_APP_CLIENT_SECRET` | **Optional.** Only for client-credentials refresh on hosted installs |
 | `MEDUSA_BACKEND_URL` | Public Medusa URL for OAuth callback |
 | `FINBAZE_STORE_KEY` | Logical store key for link tables |
+| `FINBAZE_APP_CLIENT_SECRET` | **Optional.** Only for client-credentials refresh on hosted installs |
 
 ### Public / open-source installs (no client secret)
 
@@ -84,9 +83,6 @@ OAuth uses **PKCE** (`client_id` + `code_verifier`). You do **not** need a publi
 Minimum env:
 
 ```bash
-FINBAZE_API_URL=https://api.finbaze.com
-FINBAZE_WEB_BASE_URL=https://app.finbaze.com
-FINBAZE_APP_CLIENT_ID=finbaze-medusa
 MEDUSA_BACKEND_URL=https://your-medusa.example.com
 ```
 
@@ -166,9 +162,14 @@ integrations/medusa/
 ## Development (this repo)
 
 ```bash
+# From the monorepo root (preferred):
+pnpm install
+pnpm --filter @finbaze/medusa run dev
+
+# Or from this package:
 cd integrations/medusa
-npm install
-npx medusa plugin:develop
+pnpm install
+pnpm exec medusa plugin:develop
 ```
 
-In the Medusa app: `npx medusa plugin:add @finbaze/medusa`.
+In the Medusa app: `pnpm exec medusa plugin:add @finbaze/medusa`.

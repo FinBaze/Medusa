@@ -13,6 +13,8 @@ import {
   loadConnectedLink,
   quoteSalesTax,
   type QuoteSalesTaxLineInput,
+  type QuoteSalesTaxLineResult,
+  type QuoteSalesTaxResult,
 } from "../../lib/finbaze-client"
 import { tryGetFinbazeModuleService } from "../../lib/module-access"
 
@@ -130,7 +132,7 @@ export default class FinbazeTaxProvider implements ITaxProvider {
       return []
     }
 
-    let quote
+    let quote: QuoteSalesTaxResult
     try {
       quote = await quoteSalesTax(auth, {
         destinationCountry,
@@ -146,7 +148,7 @@ export default class FinbazeTaxProvider implements ITaxProvider {
       throw error
     }
 
-    const byExternalId = new Map(
+    const byExternalId = new Map<string, QuoteSalesTaxLineResult>(
       (quote.lines ?? []).map((line) => [line.externalLineId, line]),
     )
 

@@ -1,9 +1,16 @@
+import type { BigNumberValue } from "@medusajs/framework/types"
 import type { MarketplaceInvoiceLineInput } from "./finbaze-client"
+
+/**
+ * Medusa v2 money/qty fields use BigNumberValue (number | string | BigNumber).
+ * Keep this wide so OrderDTO / OrderLineItemDTO assign cleanly.
+ */
+export type MedusaNumericLike = BigNumberValue | null | undefined
 
 export type MedusaTaxLineLike = {
   code?: string | null
-  rate?: number | null
-  total?: number | null
+  rate?: MedusaNumericLike
+  total?: MedusaNumericLike
   name?: string | null
 }
 
@@ -12,12 +19,12 @@ export type MedusaOrderLineLike = {
   title?: string | null
   product_title?: string | null
   variant_title?: string | null
-  quantity?: number | null
-  unit_price?: number | null
-  /** Minor units (cents) — Medusa stores money as integers. */
-  subtotal?: number | null
-  discount_total?: number | null
-  tax_total?: number | null
+  quantity?: MedusaNumericLike
+  unit_price?: MedusaNumericLike
+  /** Minor units (cents) — Medusa stores money as integers / BigNumberValue. */
+  subtotal?: MedusaNumericLike
+  discount_total?: MedusaNumericLike
+  tax_total?: MedusaNumericLike
   product_id?: string | null
   tax_lines?: MedusaTaxLineLike[] | null
 }
@@ -25,8 +32,8 @@ export type MedusaOrderLineLike = {
 export type MedusaShippingLineLike = {
   id?: string
   name?: string | null
-  amount?: number | null
-  tax_total?: number | null
+  amount?: MedusaNumericLike
+  tax_total?: MedusaNumericLike
   tax_lines?: MedusaTaxLineLike[] | null
 }
 

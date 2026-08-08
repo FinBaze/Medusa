@@ -16,6 +16,7 @@ import {
 import {
   buildCreditLineFromAmounts,
   buildInvoiceLinesFromMedusaOrder,
+  type MedusaNumericLike,
   type MedusaOrderLineLike,
   type MedusaShippingLineLike,
 } from "./invoice-lines"
@@ -49,10 +50,10 @@ export type MedusaOrderLike = {
 export type MedusaRefundLike = {
   id: string
   created_at?: string | Date | null
-  amount?: number | null
+  amount?: MedusaNumericLike
   items?: Array<{
     id?: string
-    quantity?: number | null
+    quantity?: MedusaNumericLike
     line_item_id?: string | null
     item?: MedusaOrderLineLike | null
   }> | null

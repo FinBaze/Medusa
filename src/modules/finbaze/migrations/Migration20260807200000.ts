@@ -2,7 +2,7 @@ import { Migration } from "@mikro-orm/migrations"
 
 /**
  * Hand-written initial migration for Finbaze link tables.
- * Prefer regenerating with `npx medusa plugin:db:generate` once the plugin is
+ * Prefer regenerating with `pnpm exec medusa plugin:db:generate` once the plugin is
  * wired into a Medusa app, then replace this file if the CLI output differs.
  */
 export class Migration20260807200000 extends Migration {

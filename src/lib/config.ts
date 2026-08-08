@@ -46,12 +46,12 @@ export function getFinbazeConfig(): ResolvedFinbazeConfig {
   const apiUrl = (
     pluginOptions.apiUrl ??
     process.env.FINBAZE_API_URL ??
-    "http://localhost:3000"
+    "https://api.platform.finbaze.com"
   ).replace(/\/$/, "")
   const webBaseUrl = (
     pluginOptions.webBaseUrl ??
     process.env.FINBAZE_WEB_BASE_URL ??
-    "http://localhost:3001"
+    "https://platform.finbaze.com"
   ).replace(/\/$/, "")
   const backendUrl = (
     pluginOptions.backendUrl ??
