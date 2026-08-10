@@ -8,6 +8,10 @@
   "files": [
     ".medusa/server"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FinBaze/Medusa.git"
+  },
   "exports": {
     "./package.json": "./package.json",
     "./.medusa/server/src/modules/*": "./.medusa/server/src/modules/*/index.js",
