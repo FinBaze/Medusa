@@ -1,5 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ensureFinbazeService } from "../lib/ensure-service"
+import { loadMedusaOrderForInvoice } from "../lib/load-medusa-order"
 import { syncMedusaOrder, type MedusaRefundLike } from "../lib/order-sync"
 
 export default async function orderRefundedHandler({
@@ -17,17 +18,8 @@ export default async function orderRefundedHandler({
   const orderId = data.order_id
   if (!orderId) return
 
-  const orderModule = container.resolve("order")
-  const order = await orderModule.retrieveOrder(orderId, {
-    relations: [
-      "items",
-      "items.tax_lines",
-      "shipping_methods",
-      "shipping_methods.tax_lines",
-      "shipping_address",
-      "customer",
-    ],
-  })
+  const order = await loadMedusaOrderForInvoice(container, orderId)
+  if (!order) return
 
   const refund: MedusaRefundLike = {
     id: data.id,

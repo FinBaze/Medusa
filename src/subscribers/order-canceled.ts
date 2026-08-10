@@ -1,5 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ensureFinbazeService } from "../lib/ensure-service"
+import { loadMedusaOrderForInvoice } from "../lib/load-medusa-order"
 import { syncMedusaOrder } from "../lib/order-sync"
 
 export default async function orderCanceledHandler({
@@ -8,10 +9,8 @@ export default async function orderCanceledHandler({
 }: SubscriberArgs<{ id: string }>) {
   ensureFinbazeService(container)
 
-  const orderModule = container.resolve("order")
-  const order = await orderModule.retrieveOrder(data.id, {
-    relations: ["items", "shipping_methods", "customer"],
-  })
+  const order = await loadMedusaOrderForInvoice(container, data.id)
+  if (!order) return
 
   await syncMedusaOrder({
     order: { ...order, status: "canceled" },

@@ -24,6 +24,14 @@ import { toMinorUnits } from "./money"
 import { getFinbazeModuleService } from "./module-access"
 import { loadVariantIdMap } from "./product-sync"
 
+export type MedusaOrderAddressLike = {
+  first_name?: string | null
+  last_name?: string | null
+  company?: string | null
+  /** Not on core OrderAddress; kept for custom/storefront payloads. */
+  email?: string | null
+}
+
 export type MedusaOrderLike = {
   id: string
   display_id?: number | null
@@ -31,6 +39,8 @@ export type MedusaOrderLike = {
   created_at?: string | Date | null
   status?: string | null
   email?: string | null
+  /** Medusa sales channel the order was placed through (nullable). */
+  sales_channel_id?: string | null
   customer?: {
     email?: string | null
     first_name?: string | null
@@ -38,11 +48,8 @@ export type MedusaOrderLike = {
     company_name?: string | null
     metadata?: Record<string, unknown> | null
   } | null
-  shipping_address?: {
-    first_name?: string | null
-    last_name?: string | null
-    company?: string | null
-  } | null
+  shipping_address?: MedusaOrderAddressLike | null
+  billing_address?: MedusaOrderAddressLike | null
   items?: MedusaOrderLineLike[] | null
   shipping_methods?: MedusaShippingLineLike[] | null
   metadata?: Record<string, unknown> | null
@@ -69,9 +76,36 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Order number for Finbaze `reference` (invoice `number` is auto-assigned on close). */
-function orderReference(order: MedusaOrderLike): string {
-  if (order.display_id != null) return `#${order.display_id}`
+/**
+ * Human order number for Finbaze `reference` (invoice `number` is auto-assigned on close).
+ * Prefer Medusa display id (`#1001`), then metadata custom numbers, then UUID as last resort.
+ */
+export function orderReference(order: MedusaOrderLike): string {
+  // Query.graph may omit/camelCase this on some Medusa versions — also accept displayId.
+  const displayId =
+    order.display_id ??
+    (order as MedusaOrderLike & { displayId?: number | null }).displayId
+  if (displayId != null && `${displayId}`.trim() !== "") {
+    return `#${displayId}`
+  }
+
+  const meta = order.metadata
+  const metaCandidates = [
+    meta?.order_number,
+    meta?.orderNumber,
+    meta?.display_id,
+    meta?.displayId,
+  ]
+  for (const value of metaCandidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return `#${value}`
+    }
+    if (typeof value === "string" && value.trim()) {
+      const trimmed = value.trim()
+      return trimmed.startsWith("#") ? trimmed : `#${trimmed}`
+    }
+  }
+
   return order.id
 }
 
@@ -85,20 +119,79 @@ function customerVatNumber(order: MedusaOrderLike): string | undefined {
   return typeof vat === "string" && vat.trim() ? vat.trim() : undefined
 }
 
+/**
+ * Resolve customer email for Finbaze relation + sales invoice.
+ * Prefer order.email (Order module scalar), then linked customer.email
+ * (requires Query.graph — see load-medusa-order.ts), then billing_address.email.
+ */
+export function resolveOrderCustomerEmail(
+  order: MedusaOrderLike,
+): string | undefined {
+  const candidates = [
+    order.email,
+    order.customer?.email,
+    order.billing_address?.email,
+  ]
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
+}
+
+/** Normalize stored allowlist; empty/null means import all channels. */
+export function normalizeSalesChannelAllowlist(
+  value: unknown,
+): string[] {
+  if (!Array.isArray(value)) return []
+  return [
+    ...new Set(
+      value
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+
+/**
+ * When allowlist is empty → import all.
+ * When allowlist is set → only orders whose sales_channel_id is listed.
+ * Orders missing sales_channel_id are skipped when the filter is active.
+ */
+export function isOrderAllowedBySalesChannels(
+  order: MedusaOrderLike,
+  allowlist: string[] | null | undefined,
+): boolean {
+  const selected = normalizeSalesChannelAllowlist(allowlist)
+  if (selected.length === 0) return true
+  const channelId = order.sales_channel_id?.trim()
+  if (!channelId) return false
+  return selected.includes(channelId)
+}
+
 function mapOrderToInvoiceInput(
   order: MedusaOrderLike,
   productMap: Map<string, string>,
 ): MarketplaceInvoiceInput {
-  const first = order.shipping_address?.first_name ?? order.customer?.first_name
-  const last = order.shipping_address?.last_name ?? order.customer?.last_name
+  const first =
+    order.billing_address?.first_name ??
+    order.shipping_address?.first_name ??
+    order.customer?.first_name
+  const last =
+    order.billing_address?.last_name ??
+    order.shipping_address?.last_name ??
+    order.customer?.last_name
   const legalName =
+    order.billing_address?.company ??
     order.shipping_address?.company ??
     order.customer?.company_name ??
     [first, last].filter(Boolean).join(" ")
 
   const currency = orderCurrency(order)
   return {
-    // Never set Finbaze invoice `number` — allocated on close. Order id goes in reference.
+    // Never set Finbaze invoice `number` — allocated on close. Display order # goes in reference.
     reference: orderReference(order),
     currency,
     date:
@@ -106,7 +199,8 @@ function mapOrderToInvoiceInput(
         ? order.created_at.toISOString()
         : (order.created_at ?? undefined),
     customer: {
-      email: order.email ?? order.customer?.email ?? undefined,
+      // Mirrored to upsertRelation + Create/UpdateSalesInvoice (same as Shopify).
+      email: resolveOrderCustomerEmail(order),
       firstName: first ?? undefined,
       lastName: last ?? undefined,
       legalName: legalName || undefined,
@@ -471,6 +565,10 @@ export async function syncMedusaOrder(params: {
   const link = await loadConnectedLink(storeKey)
   if (!link) return null
 
+  if (!isOrderAllowedBySalesChannels(params.order, link.sales_channel_ids)) {
+    return { action: "skipped_sales_channel" }
+  }
+
   const auth = authFromLink(link)
   const service = getFinbazeModuleService()
   const orderLink = await getOrClaimOrderLink(storeKey, params.order.id)
@@ -593,9 +691,10 @@ export async function syncMedusaOrder(params: {
 export async function syncHistoricalOrders(params: {
   orders: MedusaOrderLike[]
   storeKey?: string
-}): Promise<{ synced: number; failed: number }> {
+}): Promise<{ synced: number; failed: number; skipped: number }> {
   let synced = 0
   let failed = 0
+  let skipped = 0
   for (const order of params.orders) {
     try {
       const result = await syncMedusaOrder({
@@ -603,11 +702,16 @@ export async function syncHistoricalOrders(params: {
         mode: "historical",
         storeKey: params.storeKey,
       })
-      if (result) synced += 1
-      else failed += 1
+      if (!result) {
+        failed += 1
+      } else if (result.action === "skipped_sales_channel") {
+        skipped += 1
+      } else {
+        synced += 1
+      }
     } catch {
       failed += 1
     }
   }
-  return { synced, failed }
+  return { synced, failed, skipped }
 }

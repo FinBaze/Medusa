@@ -15,6 +15,11 @@ export const FinbazeLink = model
     connected: model.boolean().default(false),
     last_order_sync_at: model.dateTime().nullable(),
     last_product_sync_at: model.dateTime().nullable(),
+    /**
+     * When non-empty, only import orders whose sales_channel_id is listed.
+     * Empty / null = import from all sales channels (default).
+     */
+    sales_channel_ids: model.array().nullable(),
   })
   .indexes([
     {

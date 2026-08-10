@@ -99,20 +99,36 @@ OAuth redirect URI (seeded on `finbaze-medusa`):
 Open **Finbaze** in Medusa Admin (`/app/finbaze`):
 
 1. **Connect Finbaze** — PKCE OAuth against `{WEB}/oauth/authorize` (public client: no secret)
-2. **Sync products** — one Finbaze product per Medusa variant + `ProductLink` (prices via Query / Pricing Module)
-3. **Import historical orders** — draft/close with `send: false` when fulfilled
+2. **Sync products** — historical backfill in async batches (cursor in `SyncCursor`); one Finbaze product per Medusa variant + `ProductLink`
+3. **Import historical orders** — async batched backfill; draft/close with `send: false` when fulfilled
 4. **Imported invoices** (`/app/finbaze/invoices`) — paginated list of synced orders (Shopify-parity)
-5. **Settings** (`/app/finbaze/settings`) — after disconnect, **Clear local DB links** wipes Medusa-side `ProductLink` / `OrderLink` / credits / cursors / connection (debug only; does not delete Finbaze data)
+5. **Settings** (`/app/finbaze/settings`) — **Order import sales channels** (multi-select allowlist; empty = all channels) and, after disconnect, **Clear local DB links** (debug only; does not delete Finbaze data)
 
 ### Product / variant mapping
 
 Finbaze has no variant entity: each Medusa variant becomes its own Finbaze product (SKU, EAN, prices). `ProductLink` stores both `medusa_variant_id` (unique) and `medusa_product_id` (tax fallback when Medusa only passes `product_id`).
 
-### Product HS metadata
+### Auto product import
+
+While connected, products sync to Finbaze automatically:
+
+| Event | Behavior |
+|---|---|
+| `product.created` / `product.updated` | Upsert all variants → Finbaze products + links |
+| `product-variant.created` / `product-variant.updated` | Re-sync parent product (variant-only edits often skip `product.updated`) |
+| `product-variant.deleted` | Deactivate Finbaze product + delete `ProductLink` |
+| `product.deleted` | Deactivate all Finbaze products linked to that Medusa product |
+
+**Historical sync** (`POST /admin/finbaze/sync-products`): one page per request (`limit` default 25). Body `{ reset: true }` clears the cursor and starts over. Response includes `complete`; Admin loops until done. Cursor kind `products` on `finbaze_sync_cursor`.
+
+### Product HS / EAN metadata
 
 On Medusa products (or variants), set metadata:
 
 - `hs_code` or `finbaze_hs_code`
+- `EAN` (also accepts `ean` / `Ean`) → Finbaze product `ean`
+
+EAN resolution per synced variant: product `metadata.EAN` first, else that variant’s native `barcode`, else variant `metadata.EAN`. On update, a missing EAN is left unchanged in Finbaze (not cleared).
 
 On first create of each variant, the plugin calls `suggestTaxCodesForHsCode` for the profile’s sell-to countries.
 
@@ -148,9 +164,31 @@ input QuoteSalesTaxLineInput {
 |---|---|
 | `order.placed` / `order.updated` | Create/update **draft** sales invoice (+ `productId` on lines when linked) |
 | Fulfillment / completed | `closeSalesInvoice(send: true)` |
-| Historical import + fulfilled | Close with `send: false` |
+| Historical import + fulfilled | Close with `send: false` (async batches via `SyncCursor` kind `orders`) |
 | `order.canceled` | Credit closed invoice / delete draft |
 | Refund | Credit invoice + `OrderCreditLink` |
+
+### Sales channel filter
+
+Settings → **Order import sales channels** stores `sales_channel_ids` on `FinbazeLink`.
+
+| Setting | Action |
+|---|---|
+| None selected (default) | Import all orders |
+| One or more selected | Import only if `order.sales_channel_id` is in the allowlist |
+| Order missing `sales_channel_id` | Skip when filter active; import when filter off |
+
+Applies to subscribers (live sync) and historical import. Skipped historical orders are reported as `skipped` (not failures).
+
+## Lifecycle (products)
+
+| Event | Behavior |
+|---|---|
+| `product.created` / `product.updated` | Auto-import variants → Finbaze products |
+| `product-variant.created` / `.updated` | Auto re-sync parent product |
+| `product-variant.deleted` | Deactivate + unlink Finbaze product |
+| `product.deleted` | Deactivate linked Finbaze products |
+| Admin Sync products | Async batched historical import (`SyncCursor`) |
 
 ## Package layout
 

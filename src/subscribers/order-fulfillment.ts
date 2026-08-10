@@ -1,5 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ensureFinbazeService } from "../lib/ensure-service"
+import { loadMedusaOrderForInvoice } from "../lib/load-medusa-order"
 import { syncMedusaOrder } from "../lib/order-sync"
 
 /**
@@ -15,17 +16,8 @@ export default async function orderFulfillmentHandler({
   const orderId = data.order_id ?? data.id
   if (!orderId) return
 
-  const orderModule = container.resolve("order")
-  const order = await orderModule.retrieveOrder(orderId, {
-    relations: [
-      "items",
-      "items.tax_lines",
-      "shipping_methods",
-      "shipping_methods.tax_lines",
-      "shipping_address",
-      "customer",
-    ],
-  })
+  const order = await loadMedusaOrderForInvoice(container, orderId)
+  if (!order) return
 
   await syncMedusaOrder({
     order: {

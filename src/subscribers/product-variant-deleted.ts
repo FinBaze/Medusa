@@ -1,17 +1,17 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { ensureFinbazeService } from "../lib/ensure-service"
-import { deactivateMedusaProductInFinbaze } from "../lib/product-sync"
+import { deactivateMedusaVariantInFinbaze } from "../lib/product-sync"
 
-export default async function productDeletedHandler({
+export default async function productVariantDeletedHandler({
   event: { data },
   container,
 }: SubscriberArgs<{ id: string }>) {
   try {
     ensureFinbazeService(container)
-    await deactivateMedusaProductInFinbaze({ medusaProductId: data.id })
+    await deactivateMedusaVariantInFinbaze({ medusaVariantId: data.id })
   } catch (error) {
     console.warn(
-      "[finbaze] product.deleted sync failed",
+      "[finbaze] product-variant.deleted sync failed",
       data.id,
       error instanceof Error ? error.message : error,
     )
@@ -19,5 +19,5 @@ export default async function productDeletedHandler({
 }
 
 export const config: SubscriberConfig = {
-  event: "product.deleted",
+  event: "product-variant.deleted",
 }

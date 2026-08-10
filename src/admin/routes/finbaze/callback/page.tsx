@@ -1,4 +1,3 @@
-import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { Container, Heading, Text, toast } from "@medusajs/ui"
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -6,6 +5,8 @@ import { useNavigate, useSearchParams } from "react-router-dom"
 /**
  * OAuth redirect target registered on finbaze-medusa:
  * http://localhost:9000/app/finbaze/callback
+ *
+ * No `defineRouteConfig` label — omitting config keeps this page out of the admin sidebar.
  */
 const FinbazeCallbackPage = () => {
   const [searchParams] = useSearchParams()
@@ -52,10 +53,5 @@ const FinbazeCallbackPage = () => {
     </Container>
   )
 }
-
-// Nested under /app/finbaze; keep out of the primary nav label noise.
-export const config = defineRouteConfig({
-  label: "Finbaze callback",
-})
 
 export default FinbazeCallbackPage

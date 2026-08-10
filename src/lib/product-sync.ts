@@ -47,6 +47,33 @@ function hsCodeFromMetadata(
   return undefined
 }
 
+/** Prefer `metadata.EAN`; also accept common casing variants. */
+function eanFromMetadata(
+  metadata?: Record<string, unknown> | null,
+): string | undefined {
+  if (!metadata) return undefined
+  const raw = metadata.EAN ?? metadata.ean ?? metadata.Ean
+  if (typeof raw === "string" && raw.trim()) return raw.trim()
+  return undefined
+}
+
+/**
+ * Resolve Finbaze `ean` for a synced variant.
+ * Priority: product metadata.EAN → this variant's barcode → variant metadata.EAN.
+ * (Per-variant barcode, not "first variant", so multi-variant products keep
+ * distinct EANs when product-level metadata is unset.)
+ */
+function eanForVariant(
+  product: MedusaProductLike,
+  variant: MedusaVariantLike,
+): string | undefined {
+  const fromProduct = eanFromMetadata(product.metadata)
+  if (fromProduct) return fromProduct
+  const barcode = variant.barcode?.trim()
+  if (barcode) return barcode
+  return eanFromMetadata(variant.metadata)
+}
+
 function pricesFromVariant(
   variant: MedusaVariantLike,
 ): Record<string, number> | undefined {
@@ -120,7 +147,7 @@ function toProductInput(
     name: variantDisplayName(product, variant),
     description: product.description ?? undefined,
     sku: variant.sku?.trim() || undefined,
-    ean: variant.barcode?.trim() || undefined,
+    ean: eanForVariant(product, variant),
     hsCode,
     prices: pricesFromVariant(variant),
     taxCodesByCountry,
@@ -184,6 +211,7 @@ async function syncMedusaVariantToFinbaze(params: {
 
   if (existing?.finbaze_product_id) {
     const input = toProductInput(params.product, params.variant)
+    // Omit ean when absent so we do not clear an existing Finbaze EAN.
     const updated = await updateOneProduct(
       params.auth,
       existing.finbaze_product_id,
@@ -191,7 +219,7 @@ async function syncMedusaVariantToFinbaze(params: {
         name: input.name,
         description: input.description,
         sku: input.sku,
-        ean: input.ean,
+        ...(input.ean ? { ean: input.ean } : {}),
         hsCode: input.hsCode,
         prices: input.prices,
         active: input.active,
@@ -313,9 +341,44 @@ export async function deactivateMedusaProductInFinbaze(params: {
   return true
 }
 
+export async function deactivateMedusaVariantInFinbaze(params: {
+  medusaVariantId: string
+  storeKey?: string
+}): Promise<boolean> {
+  const storeKey = getStoreKey(params.storeKey)
+  const link = await loadConnectedLink(storeKey)
+  if (!link) return false
+
+  const service = getFinbazeModuleService()
+  const existingLinks = await service.listProductLinks({
+    store_key: storeKey,
+    medusa_variant_id: params.medusaVariantId,
+  })
+  const existing = existingLinks[0]
+  if (!existing?.finbaze_product_id) return false
+
+  await updateOneProduct(authFromLink(link), existing.finbaze_product_id, {
+    active: false,
+  })
+  await service.deleteProductLinks(existing.id)
+  return true
+}
+
+export async function touchLastProductSyncAt(storeKey?: string): Promise<void> {
+  const key = getStoreKey(storeKey)
+  const link = await loadConnectedLink(key).catch(() => null)
+  if (!link) return
+  await getFinbazeModuleService().updateFinbazeLinks({
+    id: link.id,
+    last_product_sync_at: new Date(),
+  })
+}
+
 export async function syncAllMedusaProducts(params: {
   products: MedusaProductLike[]
   storeKey?: string
+  /** When false, skip updating `last_product_sync_at` (batch runner updates). */
+  touchLastSync?: boolean
 }): Promise<{ synced: number; created: number; updated: number; failed: number }> {
   let synced = 0
   let created = 0
@@ -335,19 +398,18 @@ export async function syncAllMedusaProducts(params: {
       synced += result.created + result.updated
       created += result.created
       updated += result.updated
-    } catch {
+    } catch (error) {
       failed += 1
+      console.warn(
+        "[finbaze] product sync failed",
+        product.id,
+        error instanceof Error ? error.message : error,
+      )
     }
   }
 
-  const storeKey = getStoreKey(params.storeKey)
-  const link = await loadConnectedLink(storeKey).catch(() => null)
-  if (link) {
-    const service = getFinbazeModuleService()
-    await service.updateFinbazeLinks({
-      id: link.id,
-      last_product_sync_at: new Date(),
-    })
+  if (params.touchLastSync !== false && (synced > 0 || failed > 0)) {
+    await touchLastProductSyncAt(params.storeKey)
   }
 
   return { synced, created, updated, failed }

@@ -2,36 +2,49 @@ import { defineRouteConfig } from "@medusajs/admin-sdk"
 import {
   Badge,
   Button,
+  Checkbox,
   Container,
   Heading,
+  Label,
   Text,
   toast,
 } from "@medusajs/ui"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
+
+type SalesChannelOption = {
+  id: string
+  name: string
+  isDisabled: boolean
+}
 
 type FinbazeStatus = {
   storeKey: string
   connected: boolean
-  profileId: string | null
   productLinkCount: number
   orderLinkCount: number
   orderCreditLinkCount: number
   syncCursorCount: number
   hasFinbazeLink: boolean
+  salesChannelIds: string[]
+  salesChannels: SalesChannelOption[]
 }
 
 const FinbazeSettingsPage = () => {
   const [status, setStatus] = useState<FinbazeStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [savingChannels, setSavingChannels] = useState(false)
+  const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([])
 
   const load = async () => {
     setLoading(true)
     try {
       const response = await fetch("/admin/finbaze", { credentials: "include" })
       if (!response.ok) throw new Error("Failed to load Finbaze status")
-      setStatus(await response.json())
+      const json = (await response.json()) as FinbazeStatus
+      setStatus(json)
+      setSelectedChannelIds(json.salesChannelIds ?? [])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Load failed")
     } finally {
@@ -49,6 +62,58 @@ const FinbazeSettingsPage = () => {
     (status?.orderCreditLinkCount ?? 0) +
     (status?.syncCursorCount ?? 0) +
     (status?.hasFinbazeLink ? 1 : 0)
+
+  const channelsDirty = useMemo(() => {
+    const saved = [...(status?.salesChannelIds ?? [])].sort()
+    const current = [...selectedChannelIds].sort()
+    if (saved.length !== current.length) return true
+    return saved.some((id, index) => id !== current[index])
+  }, [selectedChannelIds, status?.salesChannelIds])
+
+  const toggleChannel = (channelId: string) => {
+    setSelectedChannelIds((prev) =>
+      prev.includes(channelId)
+        ? prev.filter((id) => id !== channelId)
+        : [...prev, channelId],
+    )
+  }
+
+  const saveSalesChannels = async () => {
+    setSavingChannels(true)
+    try {
+      const response = await fetch("/admin/finbaze", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ salesChannelIds: selectedChannelIds }),
+      })
+      const json = (await response.json().catch(() => ({}))) as {
+        message?: string
+        salesChannelIds?: string[]
+      }
+      if (!response.ok) {
+        throw new Error(json.message || "Failed to save sales channels")
+      }
+      const saved = json.salesChannelIds ?? selectedChannelIds
+      setSelectedChannelIds(saved)
+      setStatus((prev) =>
+        prev ? { ...prev, salesChannelIds: saved } : prev,
+      )
+      toast.success(
+        saved.length === 0
+          ? "Order import: all sales channels"
+          : `Order import limited to ${saved.length} sales channel${
+              saved.length === 1 ? "" : "s"
+            }`,
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save sales channels",
+      )
+    } finally {
+      setSavingChannels(false)
+    }
+  }
 
   const clearLinks = async () => {
     if (status?.connected) {
@@ -130,6 +195,75 @@ const FinbazeSettingsPage = () => {
               cursors: {status.syncCursorCount} · connection record:{" "}
               {status.hasFinbazeLink ? "yes" : "no"}
             </Text>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border border-ui-border-base p-4">
+            <Heading level="h2">Order import sales channels</Heading>
+            <Text size="small" className="text-ui-fg-subtle">
+              Choose which Medusa sales channels Finbaze should import orders
+              from. Leave none selected to import from all channels. Use this
+              when some channels sync via another Finbaze integration and must
+              not be duplicated.
+            </Text>
+            {!status.hasFinbazeLink ? (
+              <Text size="small" className="text-ui-fg-subtle">
+                Connect Finbaze first to save this setting.
+              </Text>
+            ) : null}
+            {(status.salesChannels ?? []).length === 0 ? (
+              <Text size="small" className="text-ui-fg-subtle">
+                No sales channels found in this Medusa store.
+              </Text>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {status.salesChannels.map((channel) => {
+                  const checked = selectedChannelIds.includes(channel.id)
+                  const checkboxId = `finbaze-sc-${channel.id}`
+                  return (
+                    <div
+                      key={channel.id}
+                      className="flex items-start gap-2"
+                    >
+                      <Checkbox
+                        id={checkboxId}
+                        checked={checked}
+                        disabled={!status.hasFinbazeLink || savingChannels}
+                        onCheckedChange={() => toggleChannel(channel.id)}
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor={checkboxId} weight="plus" size="small">
+                          {channel.name}
+                          {channel.isDisabled ? " (disabled)" : ""}
+                        </Label>
+                        <Text size="xsmall" className="text-ui-fg-muted">
+                          {channel.id}
+                        </Text>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <Text size="small" className="text-ui-fg-subtle">
+              {selectedChannelIds.length === 0
+                ? "Currently importing orders from all sales channels."
+                : `Importing only from ${selectedChannelIds.length} selected channel${
+                    selectedChannelIds.length === 1 ? "" : "s"
+                  }.`}
+            </Text>
+            <div>
+              <Button
+                onClick={() => void saveSalesChannels()}
+                isLoading={savingChannels}
+                disabled={
+                  !status.hasFinbazeLink ||
+                  !channelsDirty ||
+                  savingChannels
+                }
+              >
+                Save sales channels
+              </Button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 rounded-lg border border-ui-border-danger p-4">

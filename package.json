@@ -1,6 +1,6 @@
 {
   "name": "@finbaze/medusa",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "Finbaze Medusa plugin: tax quoting, product sync, and sales invoice order sync.",
   "private": false,
   "author": "Finbaze",
@@ -23,6 +23,7 @@
   "keywords": [
     "medusa-v2",
     "plugin",
+    "medusa-plugin-other",
     "medusa-plugin-integration",
     "finbaze",
     "tax"

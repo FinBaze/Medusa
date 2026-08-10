@@ -1,33 +1,32 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { ensureFinbazeService } from "../../../../lib/ensure-service"
-import { syncHistoricalOrders } from "../../../../lib/order-sync"
+import { runHistoricalOrderImportBatch } from "../../../../lib/historical-order-import"
+import { HISTORICAL_ORDERS_BATCH } from "../../../../lib/sync-cursor"
 
 type SyncBody = {
+  /** Page size (orders per request). Default 25, max 100. */
   limit?: number
+  /** Restart from offset 0 (clears SyncCursor). */
+  reset?: boolean
 }
 
+/**
+ * Async historical order import — one batch per request.
+ * Admin UI loops until `complete: true` (Shopify-parity pattern).
+ */
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   ensureFinbazeService(req.scope)
   const body = (req.body ?? {}) as SyncBody
-  const limit = Math.min(Math.max(body.limit ?? 50, 1), 200)
-
-  const orderModule = req.scope.resolve("order")
-  const [orders] = await orderModule.listAndCountOrders(
-    {},
-    {
-      take: limit,
-      order: { created_at: "DESC" },
-      relations: [
-        "items",
-        "items.tax_lines",
-        "shipping_methods",
-        "shipping_methods.tax_lines",
-        "shipping_address",
-        "customer",
-      ],
-    },
+  const limit = Math.min(
+    Math.max(body.limit ?? HISTORICAL_ORDERS_BATCH, 1),
+    100,
   )
 
-  const result = await syncHistoricalOrders({ orders })
+  const result = await runHistoricalOrderImportBatch({
+    container: req.scope,
+    limit,
+    reset: body.reset === true,
+  })
+
   res.json(result)
 }

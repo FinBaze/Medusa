@@ -91,17 +91,36 @@ const FinbazePage = () => {
 
   const syncProducts = async () => {
     setBusy("products")
+    const totals = { synced: 0, created: 0, updated: 0, failed: 0 }
     try {
-      const response = await fetch("/admin/finbaze/sync-products", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 100 }),
-      })
-      if (!response.ok) throw new Error("Product sync failed")
-      const json = await response.json()
+      let reset = true
+      let complete = false
+      while (!complete) {
+        const response = await fetch("/admin/finbaze/sync-products", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 25, reset }),
+        })
+        if (!response.ok) throw new Error("Product sync failed")
+        const json = (await response.json()) as {
+          synced: number
+          created: number
+          updated: number
+          failed: number
+          complete: boolean
+        }
+        totals.synced += json.synced
+        totals.created += json.created
+        totals.updated += json.updated
+        totals.failed += json.failed
+        complete = json.complete === true
+        reset = false
+      }
       toast.success(
-        `Products synced: ${json.synced} (${json.created} created, ${json.updated} updated)`,
+        `Products synced: ${totals.synced} (${totals.created} created, ${totals.updated} updated${
+          totals.failed > 0 ? `, ${totals.failed} failed` : ""
+        })`,
       )
       await load()
     } catch (error) {
@@ -113,16 +132,39 @@ const FinbazePage = () => {
 
   const syncOrders = async () => {
     setBusy("orders")
+    const totals = { synced: 0, failed: 0, skipped: 0 }
     try {
-      const response = await fetch("/admin/finbaze/sync-orders", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ limit: 50 }),
-      })
-      if (!response.ok) throw new Error("Order import failed")
-      const json = await response.json()
-      toast.success(`Orders imported: ${json.synced} (failed: ${json.failed})`)
+      let reset = true
+      let complete = false
+      while (!complete) {
+        const response = await fetch("/admin/finbaze/sync-orders", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 25, reset }),
+        })
+        if (!response.ok) throw new Error("Order import failed")
+        const json = (await response.json()) as {
+          synced: number
+          failed: number
+          skipped?: number
+          complete: boolean
+        }
+        totals.synced += json.synced
+        totals.failed += json.failed
+        totals.skipped += json.skipped ?? 0
+        complete = json.complete === true
+        reset = false
+      }
+      const extras = [
+        totals.failed > 0 ? `failed: ${totals.failed}` : null,
+        totals.skipped > 0 ? `skipped (channel filter): ${totals.skipped}` : null,
+      ].filter(Boolean)
+      toast.success(
+        `Orders imported: ${totals.synced}${
+          extras.length > 0 ? ` (${extras.join(", ")})` : ""
+        }`,
+      )
       await load()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Order import failed")
@@ -144,7 +186,9 @@ const FinbazePage = () => {
 
       <Text size="small" className="text-ui-fg-subtle">
         Connect a Finbaze profile for checkout tax quoting, product import, and
-        sales invoice sync (Shopify-parity lifecycle).
+        sales invoice sync (Shopify-parity lifecycle). Products sync
+        automatically on create/update; use Sync products for a full historical
+        backfill (runs in batches).
       </Text>
 
       {loading ? (
@@ -244,14 +288,15 @@ const FinbazePage = () => {
       ) : null}
 
       <div className="rounded-lg border border-ui-border-base p-4">
-        <Heading level="h2">HS codes</Heading>
+        <Heading level="h2">HS codes &amp; EAN</Heading>
         <Text size="small" className="text-ui-fg-subtle mt-2">
           Each Medusa variant syncs as its own Finbaze product. Set product (or
           variant) metadata <code>hs_code</code> or{" "}
           <code>finbaze_hs_code</code> so Finbaze can suggest{" "}
-          <code>taxCodesByCountry</code> on first import. Assign tax regions to
-          the Finbaze tax provider (<code>tp_finbaze_finbaze</code>) for
-          checkout quotes.
+          <code>taxCodesByCountry</code> on first import. Set product metadata{" "}
+          <code>EAN</code> (or use the variant barcode) for Finbaze{" "}
+          <code>ean</code>. Assign tax regions to the Finbaze tax provider (
+          <code>tp_finbaze_finbaze</code>) for checkout quotes.
         </Text>
       </div>
     </Container>

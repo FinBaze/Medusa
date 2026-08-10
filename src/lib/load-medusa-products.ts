@@ -122,3 +122,19 @@ export async function loadMedusaProductWithPrices(
   })
   return products[0] ?? null
 }
+
+/** Resolve parent product id for a variant (variant create/update/delete events). */
+export async function loadMedusaProductIdForVariant(
+  container: MedusaContainer,
+  variantId: string,
+): Promise<string | null> {
+  const query = container.resolve(ContainerRegistrationKeys.QUERY)
+  const { data } = await query.graph({
+    entity: "variant",
+    fields: ["id", "product_id"],
+    filters: { id: variantId },
+    pagination: { take: 1 },
+  })
+  const row = (data ?? [])[0] as { product_id?: string | null } | undefined
+  return row?.product_id ?? null
+}

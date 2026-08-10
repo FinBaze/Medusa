@@ -45,6 +45,8 @@ export type FinbazeLinkRecord = {
   connected?: boolean
   last_order_sync_at?: Date | string | null
   last_product_sync_at?: Date | string | null
+  /** Non-empty = only import orders from these Medusa sales channels. */
+  sales_channel_ids?: string[] | null
 }
 
 export function authFromLink(link: FinbazeLinkRecord): FinbazeLinkAuth {
@@ -285,6 +287,8 @@ export type MarketplaceInvoiceLineInput = {
 /**
  * Draft sales invoice payload for Finbaze.
  * Do not include `number` — Finbaze assigns it atomically on close.
+ * `customer.email` drives relation upsert (lookup by email) and is snapshotted
+ * onto Create/UpdateSalesInvoice — same as Shopify MarketplaceInvoiceInput.
  */
 export type MarketplaceInvoiceInput = {
   reference?: string
