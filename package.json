@@ -1,9 +1,9 @@
 {
   "name": "@finbaze/medusa",
   "version": "1.0.0",
-  "description": "Finbaze Medusa plugin: tax quoting, product sync, and sales invoice order sync.",
+  "description": "FinBaze Medusa plugin: tax quoting, product sync, and sales invoice order sync.",
   "private": false,
-  "author": "Finbaze",
+  "author": "FinBaze",
   "license": "UNLICENSED",
   "files": [
     ".medusa/server"
